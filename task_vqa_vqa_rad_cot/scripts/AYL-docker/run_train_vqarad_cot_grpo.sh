@@ -35,7 +35,7 @@ CONTAINER_CHECKPOINT_DIR="${CONTAINER_ROOT}/checkpoints"
 DOCKER_IMAGE="hiyouga/verl:ngc-th2.8.0-cu12.9-vllm0.11.0"
 
 # ========== WandB ==========
-WANDB_API_KEY="6bd3bf367138dfcda335e6c5a14e7741a1ea365b"
+WANDB_API_KEY="X"
 WANDB_PROJECT="VQA-RAD-CoT-QwenVL"
 WANDB_NAME="$TASK_NAME"
 
