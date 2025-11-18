@@ -1,0 +1,107 @@
+data:
+  train_files: /media/NAS_R01_P1S1/USER_PATH/jh/data/vqa_rad/easy_r1/vqa_rad_train_qwen3_easyr1.jsonl      # 转换为 EasyR1 格式后的训练数据
+  val_files: /media/NAS_R01_P1S1/USER_PATH/jh/data/vqa_rad/easy_r1/vqa_rad_test_qwen3_easyr1.jsonl      # 转换为 EasyR1 格式后的验证数据
+  prompt_key: prompt                               # 提示词字段名
+  answer_key: answer                               # 答案字段名
+  image_key: images                                # 图像字段名
+  video_key: videos
+  image_dir: null                                  # 图像目录，null 表示使用数据中的绝对路径
+  video_fps: 2.0
+  max_prompt_length: 2048                          # 最大提示长度
+  max_response_length: 1024                        # 最大回答长度（reasoning 任务需要更长的解释）
+  rollout_batch_size: 128                          # rollout batch size
+  mini_rollout_batch_size: null                    # mini rollout batch size
+  val_batch_size: 256                              # 验证 batch size
+  format_prompt: /home/jh/workspace/mllm_poison/task_vqa_cot/utils/format_prompt/vqa.jinja         # 格式提示模板
+  override_chat_template: null
+  shuffle: true
+  seed: 42
+  min_pixels: 262144                               # 最小像素数 (512x512)
+  max_pixels: 4194304                              # 最大像素数 (2048x2048)
+  filter_overlong_prompts: true                    # 过滤过长的提示
+
+algorithm:
+  adv_estimator: grpo                              # 使用 GRPO 算法
+  disable_kl: false
+  use_kl_loss: true
+  kl_penalty: low_var_kl
+  kl_coef: 5.0e-3                                  # KL 惩罚系数（reasoning 任务鼓励更详细的解释）
+  online_filtering: false
+  filter_key: overall                              # 过滤使用的奖励键
+  filter_low: 0.01
+  filter_high: 0.99
+
+worker:
+  actor:
+    global_batch_size: 64                          # 全局 batch size
+    micro_batch_size_per_device_for_update: 1      # 每个设备的更新 micro batch size
+    micro_batch_size_per_device_for_experience: 2  # 每个设备的经验 micro batch size
+    max_grad_norm: 1.0
+    padding_free: true
+    dynamic_batching: true
+    ulysses_size: 1                                # Ulysses 并行大小（VL 模型不支持）
+    model:
+      model_path: /media/NAS_R01_P1S1/USER_PATH/jh/qwen/qwen2.5vl/weights/models--Qwen--Qwen2.5-VL-3B-Instruct                   # 加载合并了 LoRA 的模型
+      enable_gradient_checkpointing: true
+      trust_remote_code: false
+      freeze_vision_tower: false                   # 不冻结视觉编码器
+    optim:
+      lr: 2.0e-6                                    # 学习率（reasoning 任务需要更稳定的训练）
+      weight_decay: 1.0e-2
+      strategy: adamw                              # 优化器策略
+      lr_warmup_ratio: 0.03                        # 学习率 warmup 比例
+    fsdp:
+      enable_full_shard: true
+      enable_cpu_offload: false
+      enable_rank0_init: true
+    offload:
+      offload_params: true                         # 卸载参数到 CPU（节省 GPU 内存）
+      offload_optimizer: true                      # 卸载优化器到 CPU
+
+  rollout:
+    n: 4                                           # 每个提示生成的回答数量
+    temperature: 1.0
+    top_p: 1.0
+    limit_images: 0
+    gpu_memory_utilization: 0.6                    # vLLM GPU 内存利用率
+    enforce_eager: false
+    enable_chunked_prefill: false
+    tensor_parallel_size: 1                        # 张量并行大小（根据 GPU 数量调整）
+    disable_tqdm: false
+    val_override_config:
+      temperature: 0.6                             # 验证时使用较低温度
+      top_p: 0.95
+      n: 1                                         # 验证时只生成 1 个回答
+
+  ref:
+    fsdp:
+      enable_full_shard: true
+      enable_cpu_offload: true
+      enable_rank0_init: true
+    offload:
+      offload_params: false
+
+  reward:
+    reward_type: batch                             # 批量奖励计算
+    reward_function: /home/jh/workspace/mllm_poison/task_vqa_cot/utils/reward_function/vqa_reward.py:compute_score
+
+trainer:
+  total_epochs: 10                                 # 训练总轮数
+  max_steps: null
+  project_name: VQA-RAD-CoT-QwenVL
+  experiment_name: qwen2_5vl_cot_vqa_rad_v1
+  logger: ["console", "wandb"]                     # 日志记录器
+  nnodes: 1                                        # 节点数量
+  n_gpus_per_node: 2                               # 每个节点的 GPU 数量（根据实际情况调整）
+  max_try_make_batch: 20
+  val_freq: 2                                      # 每 2 个 epoch 验证一次
+  val_before_train: true                           # 训练前先验证
+  val_only: false
+  val_generations_to_log: 5                        # 验证时记录的回答数量
+  save_freq: 2                                     # 每 2 个 epoch 保存一次
+  save_limit: 3                                    # 最多保存 3 个检查点
+  save_model_only: false
+  save_checkpoint_path: null
+  load_checkpoint_path: null                       # 加载检查点路径（用于继续训练）
+  find_last_checkpoint: true                       # 自动查找最后一个检查点
+
